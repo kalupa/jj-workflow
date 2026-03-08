@@ -55,7 +55,7 @@
 | `git reset --hard` | `jj restore` | Restore working copy to parent |
 | `git reset --hard <rev>` | `jj restore --from <rev>` | Restore to specific revision |
 | `git revert <rev>` | `jj backout -r <rev>` | Create inverse commit |
-| `git cherry-pick <rev>` | `jj new <rev>` then `jj squash` | Copy commit's changes |
+| `git cherry-pick <rev>` | `jj duplicate -r <rev>` then `jj rebase -r <dup> -d @` | Copy commit's changes onto @; no single-command equivalent |
 
 ## Remote Operations
 

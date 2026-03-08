@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jj workspace add \"$WORKTREE_NAME\" --revision @ && cd \"../$WORKTREE_NAME\" && jj new @ -m \"Work in $WORKTREE_NAME\" && echo \"$(pwd)\""
+            "command": "jj workspace add \"$WORKTREE_NAME\" --revision @ && cd \"$WORKTREE_NAME\" && jj new @ && echo \"$(pwd)\""
           }
         ]
       }

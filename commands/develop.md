@@ -25,7 +25,7 @@ Based on the task description, suggest a name:
 Call the `EnterWorktree` tool with the suggested name. This triggers the WorktreeCreate hook which:
 1. Creates a new jj workspace: `jj workspace add <name> --revision @`
 2. Changes into the new directory
-3. Creates a fresh empty change: `jj new @ -m "Work in <name>"`
+3. Creates a fresh empty change: `jj new @`
 
 ### 3. Explain the workspace model
 
@@ -53,8 +53,8 @@ git checkout main && git merge feature  # Manual merge!
 **jj workspaces** share all commits — no merging:
 ```bash
 jj workspace add dev --revision @
-cd ../dev && jj new @ -m "Dev work"
-# ... work and commit ...
+cd dev && jj new @
+# ... work and commit with: jj commit -m "Dev work" ...
 cd ../default && jj log  # Commits already visible!
 ```
 
