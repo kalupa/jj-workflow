@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/block-git.sh"
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jj workspace add \"$WORKTREE_NAME\" --revision @ && cd \"../$WORKTREE_NAME\" && jj new @ -m \"Work in $WORKTREE_NAME\" && echo \"$(pwd)\""
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jj workspace forget \"$WORKTREE_NAME\" 2>/dev/null || true; rm -rf \"$WORKTREE_NAME\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
