@@ -7,19 +7,115 @@ description: Background knowledge about jujutsu (jj) version control for Claude
 
 This project uses **jujutsu (jj)** instead of git. jj is a Git-compatible VCS with a different mental model. Always use `jj` commands, never `git`.
 
-## Core Differences from Git
+## Mental Model
 
-### No staging area
-The working copy IS the current commit (`@`). Every file change is automatically part of `@`. There is no `git add` equivalent — just edit files and commit.
+### The working copy is always a commit
+`@` is a real commit, not a staging area. Every file edit automatically amends `@`. No `git add` needed — just edit files.
 
-### Bookmarks, not branches
-jj uses **bookmarks** (similar to git branches but more explicit). They don't move automatically — you advance them with `jj bookmark advance` (`jj ba`).
+### Change IDs are stable; commit IDs are not
+Every commit has two identifiers: a **change ID** (e.g. `kzomqsrt`) that stays the same across rewrites, and a **commit ID** (hash) that changes. Always use change IDs when targeting specific commits — they survive rebases, amends, and squashes. The tutorial says: *"We will generally prefer change IDs because they stay the same when the commit is rewritten."*
 
-### Conflicts are data
-Conflicts are stored in commits, not blocking states. You can commit conflicted files and resolve later. `jj status` shows conflicts.
+### History is freely rewritable
+`jj edit <change-id>` makes any past commit the working copy. Descendants auto-rebase. You can fix a bug five commits ago without stashing, branching, or cherry-picking.
 
-### Immutable history
-All commits are immutable. "Amending" creates a new commit that replaces the old one. The old commit is still in the repo (garbage collected later).
+### Conflicts are data, not blocking states
+Conflicts are stored inside commits. A rebase that produces conflicts still succeeds — the conflicted state is committed and you resolve it later. `jj log` marks conflicted commits with `×`.
+
+### Commits are immutable — rewrites create new commits
+There is no true "amend" in jj. Every rewrite (describe, squash, rebase) creates a new commit ID while preserving the change ID. jj prevents rewriting commits that are in the immutable set (typically anything merged to `main`/`trunk()`). Use `--ignore-immutable` as a last resort escape hatch, but prefer rebasing on top instead.
+
+### The operation log is your safety net
+Every jj command is recorded. `jj undo` reverts the last operation — not just the last commit, but any operation including rebases, squashes, and pushes. Much simpler than `git reset` variants.
+
+## Inspecting Changes
+
+```bash
+jj show                    # Commit metadata + full diff — prefer over status+diff (one command)
+jj status                  # Changed filenames only (use when diff would be too large)
+jj diff                    # Full diff without commit metadata
+jj show <change-id>        # Show a specific commit
+jj log                     # Recent commits (graph view)
+jj log -r 'all()'          # All commits
+jj log -r '..@'            # Everything up to working copy
+jj evolog                  # How the current change evolved over time
+```
+
+## Creating and Editing Commits
+
+```bash
+jj new -m "msg"            # New empty commit with description (no editor)
+jj new <change-id> -m "msg"  # New commit on top of a specific revision
+jj commit -m "msg"         # Finalize @ with message, create new empty @
+jj commit -m "msg" f1 f2   # Commit only specific files
+jj describe -m "msg"       # Set/change description of @ without finalizing
+jj edit <change-id>        # Make any commit the working copy (descendants auto-rebase)
+jj abandon <change-id>     # Drop a commit; descendants rebase to its parent
+```
+
+**Always use `-m "..."` with any commit-like command — without it, an editor opens.**
+
+## Moving Changes Between Commits
+
+```bash
+jj squash -m "msg"                          # Move all of @ into parent
+jj squash file1 file2 -m "msg"             # Move specific files into parent
+jj squash --from <id> --into <id> -m "msg" # Move changes between any two commits
+jj squash -u                               # Use destination's message (no editor)
+jj split file1 file2 -m "msg"             # Split: listed files → first commit, rest stay
+```
+
+**`jj squash` and `jj split` open an editor by default** (when descriptions need to be combined, or when no filesets are given). Avoid this by always providing filesets and `-m`.
+
+`jj diffedit` always opens an interactive diff editor — avoid it. Instead:
+- Move whole files: `jj restore <files> --from <id>`
+- Move specific changes: edit files directly with your editor, then `jj squash <files>`
+
+## Resolving Conflicts
+
+```bash
+jj resolve --list              # List conflicted files
+jj resolve --tool :ours        # Non-interactive: accept side 1
+jj resolve --tool :theirs      # Non-interactive: accept side 2
+```
+
+For custom resolution: **edit the conflict markers directly in the file**. jj auto-detects the resolution on the next command — no need to run `jj resolve` at all.
+
+Conflict resolution workflow:
+```bash
+jj new <conflicted-change-id>  # Create a child of the conflicted commit
+# edit the file to resolve conflicts
+jj squash -m "resolve conflict in <file>"  # Squash resolution into the conflicted commit
+```
+
+## Operation Log (Safety Net)
+
+```bash
+jj op log       # List all operations
+jj undo         # Undo the last operation (any operation, not just commits)
+jj redo         # Redo the last undone operation
+```
+
+`jj undo` is the answer to almost any mistake. Much simpler than `git reset --hard`, `git reflog`, etc.
+
+## Bookmarks and Pushing
+
+```bash
+jj bookmark create <name> -r <change-id>  # Create bookmark at a specific commit
+jj bookmark set <name>                     # Move bookmark to @
+jj bookmark list --all                     # List all bookmarks
+jj bookmark delete <name>                  # Delete bookmark
+jj git push --bookmark <name>             # Push a specific bookmark
+jj git push                               # Push all bookmarks
+jj git fetch                              # Fetch from remote
+```
+
+## Workspace Model
+
+jj workspaces are like git worktrees but better:
+- Each workspace has its own `@` (working copy)
+- All workspaces share the same commit graph — no merging needed
+- Create: `jj workspace add <name> --revision @`
+- Remove: `jj workspace forget <name>`
 
 ## Revset Syntax
 
@@ -27,38 +123,16 @@ All commits are immutable. "Amending" creates a new commit that replaces the old
 |--------|---------|
 | `@` | Current working copy commit |
 | `@-` | Parent of working copy |
-| `@--` | Grandparent of working copy |
-| `trunk()` | Main branch tip (usually tracks remote main/master) |
+| `trunk()` | Main branch tip (remote main/master) |
 | `mine()` | Commits authored by you |
 | `bookmarks()` | All bookmarked commits |
-| `heads(mine())` | Latest commits by you |
+| `foo-` | Parent of foo |
+| `foo+` | Children of foo |
+| `::foo` | Ancestors of foo |
+| `foo::bar` | DAG range |
+| `foo..bar` | Range (like git's) |
 
-## Common Operations
-
-```bash
-jj status              # Show working copy changes (like git status)
-jj diff                # Show changes in working copy
-jj log                 # Show commit log (default: your recent commits)
-jj new                 # Create new empty change on top of @
-jj commit -m "msg"     # Finalize @ with message, create new empty @
-jj commit -m "msg" f1 f2  # Commit only specific files
-jj describe -m "msg"   # Set/change description of @ without finalizing
-jj squash              # Squash @ into parent (@-)
-jj edit <rev>          # Make an older commit the working copy
-jj bookmark set <name> # Set bookmark at current commit
-jj bookmark advance    # Advance bookmarks forward (jj ba)
-jj git push            # Push to git remote
-jj git fetch           # Fetch from git remote
-```
-
-## Workspace Model
-
-jj workspaces are like git worktrees but better:
-- Each workspace has its own `@` (working copy)
-- All workspaces share the same commit graph
-- No merging needed between workspaces — commits are immediately visible
-- Create: `jj workspace add <name> --revision @`
-- Remove: `jj workspace forget <name>`
+Prefer change IDs over relative refs like `@-` when targeting specific commits — change IDs are stable across rewrites, relative refs shift as the working copy moves.
 
 ## Reference
 
