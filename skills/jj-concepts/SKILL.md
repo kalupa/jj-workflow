@@ -7,6 +7,21 @@ description: Background knowledge about jujutsu (jj) version control for Claude
 
 This project uses **jujutsu (jj)** instead of git. jj is a Git-compatible VCS with a different mental model. Always use `jj` commands, never `git`.
 
+## Session Setup
+
+At the start of any jj session, run:
+
+```bash
+jj config list
+```
+
+This reveals user-defined aliases, custom revset aliases, preferred diff tools, and default commands that change how jj behaves. Key things to look for:
+
+- **`aliases.*`** — user shortcuts (e.g. `jj l`, `jj tug`). `jj tug` is a common community alias that moves the closest bookmark to `@-`. These may approximate newer built-ins — prefer built-in commands when both exist (e.g. `jj bookmark advance` supersedes `jj tug`).
+- **`ui.default-command`** — what `jj` with no args shows. The value `["log", "-r", "(main..@):: | (main..@)-"]` (commits between main and @, plus siblings) is what jj itself suggests in its output, so it's common.
+- **`ui.diff-formatter`** — may use an external tool like `difft` instead of built-in
+- **`ui.paginate`** — if `"never"`, the `--no-pager` flag is redundant
+
 ## Mental Model
 
 ### The working copy is always a commit
