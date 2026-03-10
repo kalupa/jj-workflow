@@ -97,17 +97,38 @@ jj redo         # Redo the last undone operation
 
 `jj undo` is the answer to almost any mistake. Much simpler than `git reset --hard`, `git reflog`, etc.
 
-## Bookmarks and Pushing
+## Bookmarks (vs Git Branches)
+
+Bookmarks map to git branches when pushing, but work differently:
+
+**Key differences from git branches:**
+- **No "current bookmark"** — `@` is not "on" a bookmark. Bookmarks are just labels pointing at commits, not a current location.
+- **Bookmarks don't move on commit** — in git, committing advances the current branch. In jj, bookmarks stay put. You move them explicitly.
+- **Remote tracking is visible** — `bookmark@origin` is a separate ref. After fetching, you can see local and remote diverge before pushing.
+- **Moving backwards requires a flag** — `jj bookmark move name --allow-backwards` (unlike `git branch -f`).
+- **Deletion is two-step** — delete locally, then push the deletion separately.
 
 ```bash
-jj bookmark create <name> -r <change-id>  # Create bookmark at a specific commit
-jj bookmark set <name>                     # Move bookmark to @
-jj bookmark list --all                     # List all bookmarks
-jj bookmark delete <name>                  # Delete bookmark
+jj bookmark create <name> -r <change-id>  # Create at specific commit
+jj bookmark set <name>                     # Point bookmark to @
+jj bookmark move <name> --to <change-id>  # Move to any commit (only existing bookmarks)
+jj bookmark move <name> --to <id> --allow-backwards  # Move to an ancestor
+jj bookmark advance                          # Advance closest bookmark(s) to @
+jj bookmark advance <name>                   # Advance specific bookmark to @
+jj bookmark advance <name> --to <change-id>  # Advance specific bookmark to target
+jj bookmark list --all                     # List local + remote tracking bookmarks
+jj bookmark delete <name>                  # Mark deleted locally
 jj git push --bookmark <name>             # Push a specific bookmark
-jj git push                               # Push all bookmarks
+jj git push --deleted                     # Propagate local deletions to remote
+jj git push                               # Push all changed bookmarks
 jj git fetch                              # Fetch from remote
 ```
+
+**`bookmark move` vs `bookmark advance`:**
+- `move` — explicit: you say exactly where the bookmark goes
+- `advance` — without args, finds the closest bookmark(s) that are ancestors of `@` and moves them forward to `@`; with a name, advances that specific bookmark to `@`; useful after squashing/rebasing when the bookmark is lagging behind your work
+
+**Bookmark operations do not affect `@`** — unlike `git checkout <branch>` which moves HEAD and updates the working tree, moving or advancing a bookmark in jj is purely administrative. The working copy stays exactly where it is.
 
 ## Workspace Model
 
