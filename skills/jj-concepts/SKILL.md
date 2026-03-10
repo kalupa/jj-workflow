@@ -85,6 +85,15 @@ jj split file1 file2 -m "msg"             # Split: listed files → first commit
 - Move whole files: `jj restore <files> --from <id>`
 - Move specific changes: edit files directly with your editor, then `jj squash <files>`
 
+`jj restore` is also useful for reverting a file to its state in a specific revision without creating a new commit — the change lands in `@` as an uncommitted edit:
+
+```bash
+jj restore <file>                    # Restore file to parent's state (discard edits)
+jj restore <file> --from <change-id> # Restore file to any revision's state
+```
+
+This is preferable to manually editing a file back to a known state.
+
 ## Resolving Conflicts
 
 ```bash
