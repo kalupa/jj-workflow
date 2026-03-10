@@ -148,6 +148,8 @@ jj git push                               # Push all changed bookmarks
 jj git fetch                              # Fetch from remote
 ```
 
+**No `--force` needed after rewrites.** `jj git push` handles rewritten history transparently — it reports "Move sideways bookmark" and force-pushes implicitly. Unlike git, there is no `--force-with-lease` muscle memory to invoke. jj tracks change IDs separately from commit IDs, so it knows the rewrite was intentional.
+
 **`bookmark move` vs `bookmark advance`:**
 - `move` — explicit: you say exactly where the bookmark goes
 - `advance` — without args, finds the closest bookmark(s) that are ancestors of `@` and moves them forward to `@`; with a name, advances that specific bookmark to `@`; useful after squashing/rebasing when the bookmark is lagging behind your work
