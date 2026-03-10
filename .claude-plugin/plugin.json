@@ -2,7 +2,7 @@
   "name": "jj-workflow",
   "description": "Teaches Claude Code to use jujutsu (jj) instead of git for version control. Provides hooks to intercept git commands, slash commands for committing and workspace management, and background knowledge about jj concepts.",
   "version": "1.0.0",
-  "commands": "commands",
-  "skills": "skills",
-  "hooks": "hooks/hooks.json"
+  "commands": "./commands",
+  "skills": "./skills",
+  "hooks": "./hooks/hooks.json"
 }

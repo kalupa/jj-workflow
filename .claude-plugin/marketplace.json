@@ -1,0 +1,11 @@
+{
+  "name": "jj-workflow",
+  "owner": { "name": "kalupa" },
+  "plugins": [
+    {
+      "name": "jj-workflow",
+      "source": "./",
+      "description": "Teaches Claude Code to use jujutsu (jj) instead of git. Intercepts git commands in jj repos, provides /jj-commit and /develop slash commands, and includes background jj knowledge."
+    }
+  ]
+}
