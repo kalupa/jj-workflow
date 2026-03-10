@@ -11,17 +11,16 @@ A Claude Code plugin that teaches Claude to use [jujutsu (jj)](https://martinvon
 
 ## Installation
 
-Add to your `~/.claude/settings.json`:
-
-```json
-{
-  "enabledPlugins": {
-    "/path/to/jj-workflow": true
-  }
-}
+```shell
+/plugin marketplace add kalupa/jj-workflow
+/plugin install jj-workflow@jj-workflow
 ```
 
-Replace `/path/to/jj-workflow` with the actual path to this directory.
+Or via CLI:
+
+```bash
+claude plugin install jj-workflow@jj-workflow
+```
 
 ## Structure
 
