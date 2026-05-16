@@ -22,6 +22,45 @@ This reveals user-defined aliases, custom revset aliases, preferred diff tools, 
 - **`ui.diff-formatter`** — may use an external tool like `difft` instead of built-in
 - **`ui.paginate`** — if `"never"`, the `--no-pager` flag is redundant
 
+## Self-Service Help (use this before guessing)
+
+`jj` ships authoritative docs for its major subsystems. Prefer these over training-data recall when the question is about syntax or semantics:
+
+```bash
+jj help <subcommand>          # Per-command flags and usage
+jj help -k <topic>            # Long-form documentation by keyword
+```
+
+Available `-k` topics and when to consult each:
+
+| Topic | When to read |
+|-------|--------------|
+| `tutorial` | First exposure to jj concepts; conflict workflow walkthrough |
+| `revsets` | Building any non-trivial `-r` expression beyond `@`, `@-`, `trunk()` |
+| `templates` | Customizing `jj log` / `jj show` output formatting (`-T`) |
+| `filesets` | Path/glob expressions used with file-aware commands |
+| `bookmarks` | Local vs remote tracking, push semantics, divergence |
+| `glossary` | Resolving unfamiliar terminology (e.g. "abandoned", "divergent", "hidden") |
+| `config` | Settings keys, config file locations, scopes |
+
+Run the relevant `jj help -k` topic when in doubt rather than guessing at flags or syntax.
+
+## Terminology: "bookmark" is not "branch"
+
+jj's vocabulary is deliberate. Use it precisely both in commands and when talking to the user — sloppy terminology produces sloppy commands.
+
+- **Bookmark** — a named pointer to a commit. This is what git calls a "branch ref". Bookmarks are what you push, list, delete, and advance.
+- **Branch** — in jj's own usage, refers to the *shape* of the commit graph: a chain of commits, whether or not anything is named. It is a topology word, not a name.
+- **Anonymous branch** — a chain of commits with no bookmark on it or any descendant. jj keeps these around (they appear in `jj log`) until explicitly abandoned. This is a normal, named concept in jj — not a warning sign.
+
+Practical consequences:
+
+- When the user says "create a branch", they almost certainly mean a bookmark. Confirm by reaching for `jj bookmark create` / `jj bookmark set`, and use the word "bookmark" in the response.
+- "Rebase this branch onto main" is fine — `branch` here is a topology, and `jj rebase -b <rev> -d main` handles it.
+- Never write `jj branch …` in a command. There is no such subcommand; the verb is `jj bookmark`. A user who types `jj branch` is reaching for git muscle memory.
+- **No "current bookmark."** Unlike git's HEAD-attached-to-branch model, `@` is not "on" a bookmark. New commits do not advance any bookmark. You move bookmarks explicitly with `jj bookmark set` / `move` / `advance`, or implicitly via `jj git push` after a rewrite (rewrites are followed by change ID).
+- In a **colocated** workspace (jj alongside `.git/`), each git branch corresponds to a jj bookmark of the same name. That's an implementation bridge, not a conceptual equivalence — keep using "bookmark" when describing user-facing operations.
+
 ## Mental Model
 
 ### The working copy is always a commit
@@ -94,7 +133,49 @@ jj restore <file> --from <change-id> # Restore file to any revision's state
 
 This is preferable to manually editing a file back to a known state.
 
+## Rebasing
+
+`jj rebase` takes one of three source selectors plus a destination. They are not interchangeable:
+
+| Flag | Moves | Mnemonic |
+|------|-------|----------|
+| `-r <rev>` | just that one commit | "this revision only" — descendants stay put, get rebased onto its old parent |
+| `-s <rev>` | `<rev>` and all descendants | "source subtree" |
+| `-b <rev>` | the whole branch containing `<rev>` that isn't yet in the destination | "branch" |
+
+Destinations:
+
+| Flag | Meaning |
+|------|---------|
+| `-d <rev>` | New parent (most common) |
+| `-A <rev>` | Insert *after* `<rev>` (between it and its current children) |
+| `-B <rev>` | Insert *before* `<rev>` |
+
+```bash
+jj rebase -s <feature> -d main         # Move feature stack onto main
+jj rebase -r <fix> -A <target>         # Reorder: move <fix> to sit after <target>
+jj rebase -b @ -d main@origin          # Update local stack onto fetched main
+```
+
+Rebase never blocks on conflicts — see Resolving Conflicts below.
+
+## Commands a git user will miss (don't fall back to git habits)
+
+These are first-class jj commands that replace multi-step git workflows. Reach for these before composing the same effect from `jj rebase` + `jj squash` + `jj new`.
+
+- **`jj absorb`** — distributes the working-copy changes into the ancestor commits that last modified the same lines. Replaces `git commit --fixup` + `git rebase -i --autosquash` in one command. Targets `mutable()` by default; restrict with `--into <revset>` or `[filesets...]`.
+- **`jj fix`** — runs configured formatters (`[fix.tools]`) on the changed files of one or more revisions, then propagates results to descendants without producing conflicts. Replaces `format && git commit --amend && rebase`.
+- **`jj duplicate -r <rev> [-A|-B|-d <dest>]`** — copies a commit's content as a new change. The canonical "cherry-pick" replacement.
+- **`jj revert -r <rev> -d <dest>`** — applies the inverse of `<rev>` at `<dest>`. (The old `jj backout` no longer exists.) `-A`/`-B` insertion flags also work.
+- **`jj interdiff --from <a> --to <b>`** — diffs the *diffs* of two revisions. Use it to see what changed between two iterations of the same change (e.g. before vs after a force-push: `jj interdiff --from push-xyz@origin --to push-xyz`). Not the same as `jj diff --from --to`, which compares file contents.
+- **`jj metaedit -r <rev>`** — change author/email/timestamp without touching content. Use `--update-change-id` to detach a copy from the original change ID.
+- **`jj parallelize <revset>`** — turn a linear chain into siblings sharing the same parent. Inverse: `jj rebase` them back into a line.
+- **`jj simplify-parents -r <rev>`** — remove redundant parents from a merge commit when one parent is an ancestor of another.
+- **`jj file <subcmd>`** — `list`, `show <file>`, `annotate <file>` (blame), `track <pat>`, `untrack <pat>`, `chmod {n|x} <file>`. Prefer these over shelling out to `cat`/`chmod` when you want the working-copy snapshot semantics.
+
 ## Resolving Conflicts
+
+Conflicts in jj are stored *inside* commits, so `jj rebase` always succeeds. The conflicted commit gets an `×` marker in `jj log`.
 
 ```bash
 jj resolve --list              # List conflicted files
@@ -104,22 +185,27 @@ jj resolve --tool :theirs      # Non-interactive: accept side 2
 
 For custom resolution: **edit the conflict markers directly in the file**. jj auto-detects the resolution on the next command — no need to run `jj resolve` at all.
 
-Conflict resolution workflow:
+Standard workflow:
 ```bash
-jj new <conflicted-change-id>  # Create a child of the conflicted commit
+jj new <conflicted-change-id>              # Create a child of the conflicted commit
 # edit the file to resolve conflicts
 jj squash -m "resolve conflict in <file>"  # Squash resolution into the conflicted commit
 ```
 
+**jj's conflict markers are not git's.** They include a `%%%%%%% diff` block showing how one side evolved relative to the merge base, and a `+++++++` block holding the literal content of the other side. See `references/conflicts.md` for the marker format and worked examples before editing a jj conflict by hand.
+
 ## Operation Log (Safety Net)
 
 ```bash
-jj op log       # List all operations
-jj undo         # Undo the last operation (any operation, not just commits)
-jj redo         # Redo the last undone operation
+jj op log                       # List all operations
+jj undo                         # Undo the last operation (any operation, not just commits)
+jj redo                         # Redo the last undone operation
+jj op show <op-id>              # Inspect what a specific operation changed
+jj op restore <op-id>           # Hard-reset the whole repo to a past op (destructive)
+jj --at-operation <op-id> <cmd> # Run any read-only command against a past repo state
 ```
 
-`jj undo` is the answer to almost any mistake. Much simpler than `git reset --hard`, `git reflog`, etc.
+`jj undo` is the answer to almost any mistake. Much simpler than `git reset --hard`, `git reflog`, etc. `--at-operation` (alias `--at-op`) is the read-only time machine — use it to inspect what the repo looked like before a problematic operation without modifying anything.
 
 ## Bookmarks (vs Git Branches)
 
@@ -183,4 +269,8 @@ Prefer change IDs over relative refs like `@-` when targeting specific commits �
 
 ## Reference
 
-See `references/git-to-jj.md` for a comprehensive git-to-jj command mapping.
+- **`references/git-to-jj.md`** — comprehensive git-to-jj command mapping
+- **`references/conflicts.md`** — jj's conflict marker format and resolution recipes
+- **`references/revsets.md`** — curated revset language: operators, common functions, idioms
+- **`references/filesets.md`** — curated fileset language for file-aware commands
+- **In-tree `jj help -k <topic>`** — authoritative docs for revsets, templates, filesets, bookmarks, config, glossary, tutorial
