@@ -54,8 +54,8 @@
 | `git rebase -i` | `jj rebase` + `jj squash` + `jj split` | Combine operations |
 | `git reset --hard` | `jj restore` | Restore working copy to parent |
 | `git reset --hard <rev>` | `jj restore --from <rev>` | Restore to specific revision |
-| `git revert <rev>` | `jj backout -r <rev>` | Create inverse commit |
-| `git cherry-pick <rev>` | `jj duplicate -r <rev>` then `jj rebase -r <dup> -d @` | Copy commit's changes onto @; no single-command equivalent |
+| `git revert <rev>` | `jj revert -r <rev> -d @` | Create inverse commit at destination (`-A`/`-B` also work). The old `jj backout` no longer exists. |
+| `git cherry-pick <rev>` | `jj duplicate -r <rev> -d @` | Single command — `-A <after>` / `-B <before>` / `-d <onto>` pick the destination. |
 
 ## Remote Operations
 
