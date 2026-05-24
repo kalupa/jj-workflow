@@ -22,6 +22,14 @@ This reveals user-defined aliases, custom revset aliases, preferred diff tools, 
 - **`ui.diff-formatter`** — may use an external tool like `difft` instead of built-in
 - **`ui.paginate`** — if `"never"`, the `--no-pager` flag is redundant
 
+## Colocated repos (jj alongside git)
+
+jj is Git-compatible: a repo can be **colocated**, meaning `.jj/` and `.git/` live in the same directory and operate on the same commits. This is the normal setup when adopting jj on an existing project.
+
+- Created with `jj git init --colocate` in an existing git repo (or `jj git clone` of a git remote). Without `--colocate`, jj keeps its own internal git store and there is no top-level `.git/`.
+- In a colocated repo, jj **auto-imports** git refs on each command and **auto-exports** bookmark changes back to git, so each git branch shows up as a jj bookmark of the same name (see the terminology section).
+- Consequence for this session: you may still *see* a `.git/` directory and git tooling (CI, hooks, editors that read git state). That does not mean you should drive with git — the `block-git.sh` hook still routes you to jj. Git just observes the state jj writes.
+
 ## Self-Service Help (use this before guessing)
 
 `jj` ships authoritative docs for its major subsystems. Prefer these over training-data recall when the question is about syntax or semantics:
@@ -56,7 +64,7 @@ jj's vocabulary is deliberate. Use it precisely both in commands and when talkin
 Practical consequences:
 
 - When the user says "create a branch", they almost certainly mean a bookmark. Confirm by reaching for `jj bookmark create` / `jj bookmark set`, and use the word "bookmark" in the response.
-- "Rebase this branch onto main" is fine — `branch` here is a topology, and `jj rebase -b <rev> -d main` handles it.
+- "Rebase this branch onto main" is fine — `branch` here is a topology, and `jj rebase -b <rev> -o main` handles it.
 - Never write `jj branch …` in a command. There is no such subcommand; the verb is `jj bookmark`. A user who types `jj branch` is reaching for git muscle memory.
 - **No "current bookmark."** Unlike git's HEAD-attached-to-branch model, `@` is not "on" a bookmark. New commits do not advance any bookmark. You move bookmarks explicitly with `jj bookmark set` / `move` / `advance`, or implicitly via `jj git push` after a rewrite (rewrites are followed by change ID).
 - In a **colocated** workspace (jj alongside `.git/`), each git branch corresponds to a jj bookmark of the same name. That's an implementation bridge, not a conceptual equivalence — keep using "bookmark" when describing user-facing operations.
@@ -71,6 +79,15 @@ Every commit has two identifiers: a **change ID** (e.g. `kzomqsrt`) that stays t
 
 ### History is freely rewritable
 `jj edit <change-id>` makes any past commit the working copy. Descendants auto-rebase. You can fix a bug five commits ago without stashing, branching, or cherry-picking.
+
+This is a core jj workflow, so use it deliberately:
+
+1. `jj edit <rev>` moves `@` onto that revision. There is no "detached HEAD" warning and nothing to stash — `@` simply *is* that commit now.
+2. Edit files normally. Because the working copy is a commit, every change is absorbed into `<rev>` in place (its change ID is preserved; it gets a new commit ID).
+3. Every descendant commit **automatically rebases** on top of the amended revision the moment you make a change. No `git rebase --continue` dance; if a descendant can't apply cleanly, the conflict is stored *in that commit* and you resolve it whenever you like — your current edit is never blocked.
+4. Move `@` wherever you want next (`jj edit <other>`, or `jj new <tip>` to get back on top). The edits you made stay with the revision you made them on — they don't follow the working copy.
+
+Contrast with `jj new <rev>`, which creates a *new child* commit on top of `<rev>` rather than editing `<rev>` itself. Reach for `jj edit` to amend an existing commit; `jj new` to start fresh work.
 
 ### Conflicts are data, not blocking states
 Conflicts are stored inside commits. A rebase that produces conflicts still succeeds — the conflicted state is committed and you resolve it later. `jj log` marks conflicted commits with `×`.
@@ -114,9 +131,13 @@ jj abandon <change-id>     # Drop a commit; descendants rebase to its parent
 jj squash -m "msg"                          # Move all of @ into parent
 jj squash file1 file2 -m "msg"             # Move specific files into parent
 jj squash --from <id> --into <id> -m "msg" # Move changes between any two commits
+jj squash --into <ancestor> file1 -m "msg" # Targeted fixup: send specific files to a known ancestor
 jj squash -u                               # Use destination's message (no editor)
-jj split file1 file2 -m "msg"             # Split: listed files → first commit, rest stay
+jj split file1 file2 -m "msg"             # Split @: listed files → first commit, rest stay
+jj split -r <id> file1 file2 -m "msg"     # Split an arbitrary commit (not just @)
 ```
+
+Use `jj squash --into <ancestor>` when you know exactly which commit a change belongs to. When you *don't* — "fold these working-copy fixes back into wherever each line came from" — use `jj absorb` instead (see below), which routes each hunk automatically.
 
 **`jj squash` and `jj split` open an editor by default** (when descriptions need to be combined, or when no filesets are given). Avoid this by always providing filesets and `-m`.
 
@@ -147,15 +168,19 @@ Destinations:
 
 | Flag | Meaning |
 |------|---------|
-| `-d <rev>` | New parent (most common) |
+| `--onto`/`-o <rev>` | New parent (most common) |
 | `-A <rev>` | Insert *after* `<rev>` (between it and its current children) |
 | `-B <rev>` | Insert *before* `<rev>` |
 
+`--onto/-o` is the current name; `-d`/`--destination` still works as a legacy alias but `jj help rebase` no longer advertises it — prefer `-o`.
+
 ```bash
-jj rebase -s <feature> -d main         # Move feature stack onto main
+jj rebase -s <feature> -o main         # Move feature stack onto main
 jj rebase -r <fix> -A <target>         # Reorder: move <fix> to sit after <target>
-jj rebase -b @ -d main@origin          # Update local stack onto fetched main
+jj rebase -b @ -o main@origin          # Update local stack onto fetched main
 ```
+
+To reorder commits, prefer the explicit non-interactive form (`jj rebase -r C --before B`) over `jj arrange`, which opens an interactive TUI.
 
 Rebase never blocks on conflicts — see Resolving Conflicts below.
 
@@ -165,8 +190,8 @@ These are first-class jj commands that replace multi-step git workflows. Reach f
 
 - **`jj absorb`** — distributes the working-copy changes into the ancestor commits that last modified the same lines. Replaces `git commit --fixup` + `git rebase -i --autosquash` in one command. Targets `mutable()` by default; restrict with `--into <revset>` or `[filesets...]`.
 - **`jj fix`** — runs configured formatters (`[fix.tools]`) on the changed files of one or more revisions, then propagates results to descendants without producing conflicts. Replaces `format && git commit --amend && rebase`.
-- **`jj duplicate -r <rev> [-A|-B|-d <dest>]`** — copies a commit's content as a new change. The canonical "cherry-pick" replacement.
-- **`jj revert -r <rev> -d <dest>`** — applies the inverse of `<rev>` at `<dest>`. (The old `jj backout` no longer exists.) `-A`/`-B` insertion flags also work.
+- **`jj duplicate -r <rev> [-A|-B|-o <dest>]`** — copies a commit's content as a new change. The canonical "cherry-pick" replacement. (`-o`/`--onto`; `-d` is still an accepted alias.)
+- **`jj revert -r <rev> -o <dest>`** — applies the inverse of `<rev>` at `<dest>`. (The old `jj backout` no longer exists.) `-A`/`-B` insertion flags also work; `-d` is an alias of `-o`.
 - **`jj interdiff --from <a> --to <b>`** — diffs the *diffs* of two revisions. Use it to see what changed between two iterations of the same change (e.g. before vs after a force-push: `jj interdiff --from push-xyz@origin --to push-xyz`). Not the same as `jj diff --from --to`, which compares file contents.
 - **`jj metaedit -r <rev>`** — change author/email/timestamp without touching content. Use `--update-change-id` to detach a copy from the original change ID.
 - **`jj parallelize <revset>`** — turn a linear chain into siblings sharing the same parent. Inverse: `jj rebase` them back into a line.
@@ -196,16 +221,28 @@ jj squash -m "resolve conflict in <file>"  # Squash resolution into the conflict
 
 ## Operation Log (Safety Net)
 
+**Reach for the simplest tool that fixes the problem. Treat the `jj op` family — especially `jj op restore` — as a last resort, not a first move.** The op log rewinds *whole-repo state* and can silently discard unrelated work that happened after the operation you're targeting. Before touching it, ask whether a narrower command does the job:
+
+| What you want | Use this first | Not this |
+|---------------|----------------|----------|
+| Take back the operation you just ran | `jj undo` (repeat for more) | `jj op restore` |
+| Re-apply something you just undid | `jj redo` | `jj op restore` |
+| Cancel the *effect* of a committed change, keeping history | `jj revert -r <rev> -o @` | `jj op revert` |
+| Throw away working-copy edits / reset a file | `jj restore [<files>]` | `jj op restore` |
+
+Only when none of those express what you need — e.g. you must surgically undo one operation several steps back while keeping everything after it, or recover from a tangle that simple undo can't reach — drop down to the op log:
+
 ```bash
 jj op log                       # List all operations
-jj undo                         # Undo the last operation (any operation, not just commits)
+jj undo                         # Undo the last operation (any operation, not just commits) — START HERE
 jj redo                         # Redo the last undone operation
 jj op show <op-id>              # Inspect what a specific operation changed
-jj op restore <op-id>           # Hard-reset the whole repo to a past op (destructive)
+jj op revert <op-id>            # Surgical: undo one specific past operation, keeping later ones
+jj op restore <op-id>           # Blunt + destructive: discard ALL later operations to return to a past state
 jj --at-operation <op-id> <cmd> # Run any read-only command against a past repo state
 ```
 
-`jj undo` is the answer to almost any mistake. Much simpler than `git reset --hard`, `git reflog`, etc. `--at-operation` (alias `--at-op`) is the read-only time machine — use it to inspect what the repo looked like before a problematic operation without modifying anything.
+`jj undo` is the answer to almost any recent mistake — much simpler than `git reset --hard`, `git reflog`, etc. Between the two op-log rewrites, prefer `jj op revert` (surgical, keeps later work) over `jj op restore` (discards everything after the target). `--at-operation` (alias `--at-op`) is the read-only time machine — safe to use freely, since it only *inspects* a past repo state without modifying anything.
 
 ## Bookmarks (vs Git Branches)
 
@@ -213,7 +250,7 @@ Bookmarks map to git branches when pushing, but work differently:
 
 **Key differences from git branches:**
 - **No "current bookmark"** — `@` is not "on" a bookmark. Bookmarks are just labels pointing at commits, not a current location.
-- **Bookmarks don't move on commit** — in git, committing advances the current branch. In jj, bookmarks stay put. You move them explicitly.
+- **Bookmarks don't move on commit** — in git, committing advances the current branch. In jj, bookmarks stay put. You move them explicitly. **This is the most common agent foot-gun:** after `jj commit` your new work sits *above* the bookmark, so `jj git push` pushes nothing new. You must first advance the bookmark — `jj bookmark move <name> --to @-` (or `jj bookmark advance` / `jj ba`) — then push. The `/jj-commit` command ends with this reminder for exactly this reason.
 - **Remote tracking is visible** — `bookmark@origin` is a separate ref. After fetching, you can see local and remote diverge before pushing.
 - **Moving backwards requires a flag** — `jj bookmark move name --allow-backwards` (unlike `git branch -f`).
 - **Deletion is two-step** — delete locally, then push the deletion separately.
