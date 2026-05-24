@@ -279,6 +279,31 @@ jj git fetch                              # Fetch from remote
 
 **Bookmark operations do not affect `@`** — unlike `git checkout <branch>` which moves HEAD and updates the working tree, moving or advancing a bookmark in jj is purely administrative. The working copy stays exactly where it is.
 
+### Divergent change after a merged PR
+
+A **divergent change** is one change ID that resolves to two or more visible commits — `jj log` marks them `(divergent)` and `jj log -r <change-id>` errors with "Change ID is divergent" (disambiguate with `<change-id>/0`, `/1`, …).
+
+The most common way to hit this: you push a feature commit to a branch, the PR is merged (squash/rebase merge) so the *same change* lands on `main` as a **new commit ID**, then `jj git fetch` imports it. Now your local pushed commit and the merged-into-`main` commit share one change ID → divergent. The merged commit on `main` is the keeper; your local copy is a stale duplicate.
+
+**Fix — usually just fetch again:**
+
+```bash
+jj git fetch     # prunes the (now-deleted) merged push branch; jj auto-abandons the unreachable duplicate
+jj log           # confirm the change is no longer marked (divergent)
+jj new main      # start fresh work on top of the merged main, if you aren't already there
+```
+
+GitHub typically deletes the PR branch on merge, so a fetch prunes the remote-tracking ref and the duplicate becomes unreachable and is abandoned automatically.
+
+**If a fetch doesn't clear it** (the remote branch still exists, or the ref lingers as `name@origin`): the duplicate is held alive — and marked *immutable* — by that remote-tracking ref, so `jj abandon` will refuse it until the ref is gone. Drop the ref, then abandon:
+
+```bash
+jj bookmark forget --include-remotes <push-branch>   # remove local + remote-tracking refs (no remote push)
+jj abandon <commit-id>                               # commit-id, not change-id (change-id is ambiguous while divergent)
+```
+
+If the branch genuinely still exists on the remote and you want it gone everywhere, delete it on the remote (e.g. via the PR/host UI) or `jj bookmark delete <push-branch>` then `jj git push --deleted`. Everything here is recorded in the op log — `jj undo` backs out a wrong step.
+
 ## Workspace Model
 
 jj workspaces are like git worktrees but better:
