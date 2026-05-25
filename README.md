@@ -6,8 +6,12 @@ A Claude Code plugin that teaches Claude to use [jujutsu (jj)](https://martinvon
 
 - **Intercepts git commands** in jj repos and suggests the jj equivalent
 - **`/jj-commit`** — selective file grouping and commit workflow
+- **`/jj-sync`** — fetch and rebase in-progress work onto the updated trunk
+- **`/jj-push`** — point a bookmark at the right change and push it
+- **`/jj-resolve`** — guided resolution of jj conflicts (stored as data in commits)
+- **`/jj-absorb`** — auto-distribute working-copy edits into the commits that introduced those lines
 - **`/develop`** — enter isolated jj workspaces for development
-- **Background knowledge** — jj concepts, revset syntax, and a git-to-jj command mapping
+- **Background knowledge** — jj concepts, revset and fileset syntax, conflict resolution, and a git-to-jj command mapping
 
 ## Installation
 
@@ -29,6 +33,10 @@ claude plugin install jj-workflow@jj-workflow
 hooks/hooks.json              Hook definitions (git blocking, worktree lifecycle)
 hooks/scripts/block-git.sh    Git command interceptor
 commands/jj-commit.md         /jj-commit slash command
+commands/jj-sync.md           /jj-sync slash command
+commands/jj-push.md           /jj-push slash command
+commands/jj-resolve.md        /jj-resolve slash command
+commands/jj-absorb.md         /jj-absorb slash command
 commands/develop.md           /develop slash command
 skills/jj-concepts/           Background jj knowledge for Claude
 scripts/cleanup-workspace.sh  Workspace cleanup helper
