@@ -17,7 +17,7 @@ Four component types, wired together by `.claude-plugin/plugin.json` and `hooks/
    - `guard-jj-message.sh`: `PreToolUse` on `Bash`. Blocks `jj split|squash|commit` without `-m`/`--message` (or `-u` for squash) to prevent Claude from getting stuck in an interactive editor.
    - `WorktreeCreate` / `WorktreeRemove`: bridge Claude Code's worktree mechanism to `jj workspace add` / `jj workspace forget`. jj workspaces share one commit graph, so no merge is needed when work completes.
 
-2. **Slash commands** (`commands/*.md`) — `/jj-commit` (selective file grouping + commit, runs optional `.claude/jj-pre-commit.sh` from the host project) and `/develop` (enter a jj workspace via the `EnterWorktree` mechanism). Both have `disable-model-invocation: true` — Claude only runs them when the user types the slash command.
+2. **Slash commands** (`commands/*.md`) — `/jj-commit` (selective file grouping + commit, runs optional `.claude/jj-pre-commit.sh` from the host project), `/jj-sync` (fetch + rebase onto trunk), `/jj-push` (set/advance a bookmark and push), `/jj-resolve` (guided conflict resolution), `/jj-absorb` (`jj absorb` working-copy edits into their originating commits), and `/develop` (enter a jj workspace via the `EnterWorktree` mechanism). All have `disable-model-invocation: true` — Claude only runs them when the user types the slash command.
 
 3. **Skill** (`skills/jj-concepts/SKILL.md` + `references/`) — background knowledge auto-loaded when jj work is happening. Documents the jj mental model (working copy is a commit, change IDs vs commit IDs, conflicts as data, immutable set).
 
